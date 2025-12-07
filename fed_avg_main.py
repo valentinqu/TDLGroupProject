@@ -15,9 +15,9 @@ from util.data_utils import get_mnist_dataloaders
 class Args:
     num_clients = 10         # Total number of clients
     num_sample_clients = 5   # Number of clients randomly selected per round (C * K)
-    rounds = 10              # Total training rounds (Communication Rounds)
-    local_steps = 5          # Client-side local training steps (Local Epochs/Steps)
-    lr = 0.01                # Learning rate
+    rounds = 30              # Total training rounds (Communication Rounds)
+    local_steps = 10          # Client-side local training steps (Local Epochs/Steps)
+    lr = 0.05                # Learning rate
     batch_size = 32          # Local training Batch Size
     device = "cuda" if torch.cuda.is_available() else "cpu"
     seed = 42                # Random seed, ensuring reproducibility
