@@ -21,6 +21,7 @@ class Args:
     batch_size = 32          # Local training Batch Size
     device = "cuda" if torch.cuda.is_available() else "cpu"
     seed = 42                # Random seed, ensuring reproducibility
+    eval_iterations = 5
 
 args = Args()
 
@@ -107,14 +108,17 @@ if __name__ == "__main__":
             
             # --- B. Evaluation phase ---
             # Evaluate the global model performance on the test set
-            test_loss, test_acc = server.eval_model(test_loader)
-            
+            postfix_dict = {
+                "Train Loss": f"{train_loss:.4f}"
+            }
+
+            if args.eval_iterations != 0 and (round_idx + 1) % args.eval_iterations == 0:
+                test_loss, test_acc = server.eval_model(test_loader)
+                postfix_dict["Test Acc"] = f"{test_acc*100:.2f}%"
+                   
             # --- C. Log printing ---
             # Update the display on the progress bar
-            t.set_postfix({
-                "Train Loss": f"{train_loss:.4f}",
-                "Test Acc": f"{test_acc*100:.2f}%"
-            })
+            t.set_postfix(postfix_dict)
             
             # Optional: Print detailed log
             # print(f"\nRound {round_idx + 1}: Train Loss {train_loss:.4f}, Test Accuracy {test_acc:.4f}")
