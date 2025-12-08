@@ -80,7 +80,7 @@ def setup_system():
         server_model_inference=model_inference,
         server_criterion=criterion,
         server_accuracy_func=accuracy,
-        num_sample_clients=args.num_sample_clients, # 设置采样数量
+        num_sample_clients=args.num_sample_clients,
         local_update_steps=args.local_steps
     )
     

@@ -33,7 +33,7 @@ class FedAvgServer:
         return random.sample(range(len(self.clients)), n)
 
     def aggregate_client_models(self, client_indices: list[int]) -> None:
-        """FedAvg 聚合核心逻辑"""
+        """FedAvg Aggregate Core Logic"""
         self.server_model.train()
         
         # Initialise the accumulator container (all zeros)
