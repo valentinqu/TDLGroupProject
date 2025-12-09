@@ -35,7 +35,7 @@ def set_seed(seed):
     random.seed(seed)
 
 def main():
-    print(f"开始单机零阶优化 (ZO-SGD) 测试 (Device: {args.device})")
+    print(f"Starting zero-order optimisation testing (Device: {args.device})")
     set_seed(args.seed)
 
     # 1. Data preparation
