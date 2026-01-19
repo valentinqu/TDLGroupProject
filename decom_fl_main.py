@@ -4,6 +4,7 @@ import torch.optim as optim
 from tqdm import tqdm
 import random
 import numpy as np
+import csv
 import os
 
 from decom_fl.client import ResetClient
@@ -17,17 +18,17 @@ from util.gradient_estimators.random_gradient_estimator import (
 )
 
 class Args:
-    num_clients = 2
+    num_clients = 3
     num_sample_clients = 2
-    rounds = 1000
-    local_steps = 5
+    rounds = 900
+    local_steps = 5     # 1, 5, 10
     
     lr = 0.001
     batch_size = 256
     weight_decay = 1e-4
     
     zo_mu = 0.05
-    zo_n_pert = 10
+    zo_n_pert = 20
     zo_method = RandomGradEstimateMethod.rge_central
     paramwise = True
     
@@ -61,7 +62,7 @@ def setup_system():
         weight_decay=args.weight_decay
     )
     criterion = nn.CrossEntropyLoss()
-    
+
     server_estimator = RandomGradientEstimator(
         parameters=global_model.parameters(),
         mu=args.zo_mu,
@@ -156,14 +157,24 @@ if __name__ == "__main__":
                     
                     t.write(f"\n[Round {round_idx}] adjust parameters: LR -> {new_lr:.6f}, Perturbs -> {new_pert}")
 
-            test_loss, test_acc = server.eval_model(test_loader)
+            eval_loss, eval_acc = server.eval_model(test_loader)
             
-            history["loss"].append(test_loss)
-            history["acc"].append(test_acc)
+            history["loss"].append(eval_loss)
+            history["acc"].append(eval_acc)
             
             t.set_postfix({
                 "Train Loss": f"{train_loss:.4f}",
-                "Test Acc": f"{test_acc*100:.2f}%"
+                "Train Acc": f"{train_acc*100:.2f}%"
             })
 
     print(f"\n Training complete! Final accuracy: {history['acc'][-1]*100:.2f}%")
+
+    # Save the output data
+    output_csv = f'./output/results_k{args.local_steps}_p{args.zo_n_pert}.csv'
+    with open(output_csv, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['Iteration', 'Evaluation Loss', 'Evaluation Accuracy'])
+        for i, (loss_val, acc_val) in enumerate(zip(history["loss"], history["acc"])):
+            writer.writerow([i, loss_val, acc_val])
+
+    print(f"CSV is saved as: {output_csv}")

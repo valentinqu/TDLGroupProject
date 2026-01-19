@@ -255,6 +255,6 @@ class CeZO_Server:
                 eval_accuracy.update(self.server_accuracy_func(pred, batch_labels))
         print(
             f"\nEvaluation(Iteration {self.seed_grad_records.current_iteration}): ",
-            f"Eval Loss:{eval_loss.avg:.4f}, Accuracy:{eval_accuracy.avg * 100:.2f}%",
+            f"Evaluation Loss:{eval_loss.avg:.4f}, Accuracy:{eval_accuracy.avg * 100:.2f}%",
         )
         return eval_loss.avg, eval_accuracy.avg
