@@ -28,7 +28,7 @@ class Args:
     weight_decay = 1e-4
     
     zo_mu = 0.05
-    zo_n_pert = 20
+    zo_n_pert = 40
     zo_method = RandomGradEstimateMethod.rge_central
     paramwise = True
     
