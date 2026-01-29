@@ -52,3 +52,64 @@ def get_mnist_dataloaders(num_clients=10, batch_size=32, iid=True, seed=42):
     test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False, pin_memory=True)
 
     return client_loaders, test_loader
+
+
+
+def get_cifar10_dataloaders(num_clients=10, batch_size=32, iid=True, seed=42):
+    """
+    Download and split the CIFAR-10 dataset
+    """
+    # 1. Set random seed
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
+    # 2. Data preprocessing (CIFAR-10 specific)
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=(0.4914, 0.4822, 0.4465),
+            std=(0.2470, 0.2435, 0.2616)
+        )
+    ])
+
+    # 3. Download dataset
+    data_root = './data'
+    train_dataset = datasets.CIFAR10(
+        root=data_root, train=True, download=True, transform=transform
+    )
+    test_dataset = datasets.CIFAR10(
+        root=data_root, train=False, download=True, transform=transform
+    )
+
+    # 4. Data partitioning
+    if iid:
+        total_len = len(train_dataset)
+        len_per_client = total_len // num_clients
+        lengths = [len_per_client] * num_clients
+
+        for i in range(total_len % num_clients):
+            lengths[i] += 1
+
+        client_datasets = random_split(train_dataset, lengths)
+    else:
+        raise NotImplementedError("Non-IID mode not implemented yet.")
+
+    # 5. DataLoader
+    client_loaders = [
+        DataLoader(
+            ds,
+            batch_size=batch_size,
+            shuffle=True,
+            pin_memory=True
+        )
+        for ds in client_datasets
+    ]
+
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=64,
+        shuffle=False,
+        pin_memory=True
+    )
+
+    return client_loaders, test_loader
