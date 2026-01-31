@@ -10,6 +10,7 @@ import pandas as pd
 from decom_fl.client import ResetClient
 from decom_fl.server import CeZO_Server
 from models import CNN_MNIST
+#from models import ResNet18CIFAR
 import torchvision.models as models
 from util.data_utils import get_mnist_dataloaders, get_cifar10_dataloaders
 from util.metrics import accuracy
@@ -23,7 +24,7 @@ class Args:
     num_clients = 3
     num_sample_clients = 2
     rounds = 900
-    local_steps = 5
+    local_steps = 10
 
     lr = 0.001
     batch_size = 128
@@ -65,19 +66,23 @@ def setup_system():
 
     # global_model = CNN_MNIST().to
     global_model = models.resnet18(pretrained=True).to(args.device)
+    for param in global_model.parameters():
+        param.requires_grad = False
     num_classes = 10
     global_model.fc = nn.Linear(global_model.fc.in_features, num_classes)
     global_model = global_model.to(args.device)
 
+    params_to_optimize = [p for p in global_model.parameters() if p.requires_grad]
+
     server_optimizer = optim.AdamW(
-        global_model.parameters(),
+        params_to_optimize,
         lr=args.lr,
         weight_decay=args.weight_decay
     )
     criterion = nn.CrossEntropyLoss()
 
     server_estimator = RandomGradientEstimator(
-        parameters=global_model.parameters(),
+        params_to_optimize,
         mu=args.zo_mu,
         num_pert=args.zo_n_pert,
         grad_estimate_method=args.zo_method,
@@ -95,20 +100,29 @@ def setup_system():
         # local_model = CNN_MNIST().to(args.device)
         # local_model.load_state_dict(global_model.state_dict())
 
-        local_model = models.resnet18(pretrained=False)
+        local_model = models.resnet18(pretrained=True).to(args.device)
+
+        for param in local_model.parameters():
+            param.requires_grad = False
+            
         local_model.fc = nn.Linear(local_model.fc.in_features, num_classes)
         local_model = local_model.to(args.device)
         local_model.load_state_dict(global_model.state_dict())
 
+        local_model.eval() 
+        local_model.fc.train()
+
+        params_to_optimize = [p for p in local_model.parameters() if p.requires_grad]
+
         local_optimizer = optim.AdamW(
-            local_model.parameters(),
+            params_to_optimize,
             lr=args.lr,
             weight_decay=args.weight_decay
         )
 
         # Local Estimator
         local_estimator = RandomGradientEstimator(
-            parameters=local_model.parameters(),
+            parameters=params_to_optimize,
             mu=args.zo_mu,
             num_pert=args.zo_n_pert,
             grad_estimate_method=args.zo_method,
