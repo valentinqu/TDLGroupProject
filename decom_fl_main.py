@@ -4,13 +4,15 @@ import torch.optim as optim
 from tqdm import tqdm
 import random
 import numpy as np
-import csv
 import os
+import pandas as pd
+
 
 from decom_fl.client import ResetClient
 from decom_fl.server import CeZO_Server
-from models import CNN_MNIST
-from util.data_utils import get_mnist_dataloaders
+from models import CNN_MNIST, ResNet18CIFAR
+import torchvision.models as models
+from util.data_utils import get_mnist_dataloaders, get_cifar10_dataloaders
 from util.metrics import accuracy
 from util.gradient_estimators.random_gradient_estimator import (
     RandomGradientEstimator, 
@@ -20,22 +22,22 @@ from util.gradient_estimators.random_gradient_estimator import (
 class Args:
     num_clients = 3
     num_sample_clients = 2
-    rounds = 900
-    local_steps = 5     # 1, 5, 10
+    rounds = 9000
+    local_steps = 1
     
     lr = 0.001
     batch_size = 256
     weight_decay = 1e-4
     
     zo_mu = 0.05
-    zo_n_pert = 40
-    zo_method = RandomGradEstimateMethod.rge_central
+    zo_n_pert = 10
+    zo_method = RandomGradEstimateMethod.rge_forward  # RandomGradEstimateMethod.rge_forward
     paramwise = True
     
     adjust_perturb = True
     milestones = [400, 700]
     
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cpu" # "cuda" if torch.cuda.is_available() else "cpu"
     seed = 42
 
 args = Args()
@@ -49,20 +51,46 @@ def set_seed(seed):
 
 def setup_system():
     print(f" Initialising DeComFL (Device: {args.device}) ...")
-    
+
+    print(torch.__version__)  # Nightly 版本号
+    print(torch.version.cuda)  # 12.8
+    print(torch.cuda.is_available())  # True
+    print(torch.cuda.get_device_name(0))  # NVIDIA GeForce RTX 5060 Laptop GPU
+    print(torch.cuda.get_arch_list())  # 应该包含 'sm_120'
+
     client_loaders, test_loader = get_mnist_dataloaders(
         num_clients=args.num_clients, batch_size=args.batch_size
     )
+    # client_loaders, test_loader = get_cifar10_dataloaders(
+    #     num_clients=args.num_clients, batch_size=args.batch_size
+    # )
 
+    def freeze_resnet_layers(model, freeze_until="layer3"):
+        freeze = True
+        for name, param in model.named_parameters():
+            if freeze:
+                param.requires_grad = False
+            if freeze_until in name:
+                freeze = False
+
+    global_model = CNN_MNIST().to
     global_model = CNN_MNIST().to(args.device)
-    
+    # global_model = ResNet18CIFAR(pretrained=True).to(args.device)
+    # freeze_resnet_layers(model=global_model, freeze_until="layer3")
+
     server_optimizer = optim.AdamW(
-        global_model.parameters(), 
-        lr=args.lr, 
+        global_model.parameters(),
+        lr=args.lr,
         weight_decay=args.weight_decay
     )
-    criterion = nn.CrossEntropyLoss()
+    # server_optimizer = optim.SGD(
+    #     filter(lambda p: p.requires_grad, global_model.parameters()),
+    #     lr=args.lr,
+    #     weight_decay=args.weight_decay
+    # )
 
+    criterion = nn.CrossEntropyLoss()
+    
     server_estimator = RandomGradientEstimator(
         parameters=global_model.parameters(),
         mu=args.zo_mu,
@@ -81,12 +109,21 @@ def setup_system():
         # Local Model & Optimizer
         local_model = CNN_MNIST().to(args.device)
         local_model.load_state_dict(global_model.state_dict())
-        
+
+        # local_model = ResNet18CIFAR(pretrained=True).to(args.device)
+        # local_model.load_state_dict(global_model.state_dict())
+        # freeze_resnet_layers(model=local_model, freeze_until="layer3")
+
         local_optimizer = optim.AdamW(
-            local_model.parameters(), 
-            lr=args.lr, 
+            local_model.parameters(),
+            lr=args.lr,
             weight_decay=args.weight_decay
         )
+        # local_optimizer = optim.SGD(
+        #     filter(lambda p: p.requires_grad, local_model.parameters()),
+        #     lr=args.lr,
+        #     weight_decay=args.weight_decay
+        # )
         
         # Local Estimator
         local_estimator = RandomGradientEstimator(
@@ -150,31 +187,34 @@ if __name__ == "__main__":
                     # Each adjustment: LR halved, sampling frequency doubled
                     # This can significantly enhance subsequent precision.
                     new_lr = server.optim.param_groups[0]["lr"] * 0.5
-                    new_pert = server.clients[0].grad_estimator.num_pert * 2
+                    new_pert = int(server.clients[0].grad_estimator.num_pert * 2) # * 2
                     
                     server.set_learning_rate(new_lr)
                     server.set_perturbation(new_pert)
                     
                     t.write(f"\n[Round {round_idx}] adjust parameters: LR -> {new_lr:.6f}, Perturbs -> {new_pert}")
 
-            eval_loss, eval_acc = server.eval_model(test_loader)
+            test_loss, test_acc = server.eval_model(test_loader)
             
-            history["loss"].append(eval_loss)
-            history["acc"].append(eval_acc)
+            history["loss"].append(test_loss)
+            history["acc"].append(test_acc)
             
             t.set_postfix({
                 "Train Loss": f"{train_loss:.4f}",
-                "Train Acc": f"{train_acc*100:.2f}%"
+                "Test Acc": f"{test_acc*100:.2f}%"
             })
 
+            row = pd.DataFrame([{
+                "loss": test_loss,
+
+                "acc": test_acc
+            }])
+
+            row.to_csv(
+                "history_forward_6000.csv",
+                mode="a",
+                header=False,
+                index=False
+            )
+
     print(f"\n Training complete! Final accuracy: {history['acc'][-1]*100:.2f}%")
-
-    # Save the output data
-    output_csv = f'./output/results_k{args.local_steps}_p{args.zo_n_pert}.csv'
-    with open(output_csv, 'w', newline='', encoding='utf-8') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(['Iteration', 'Evaluation Loss', 'Evaluation Accuracy'])
-        for i, (loss_val, acc_val) in enumerate(zip(history["loss"], history["acc"])):
-            writer.writerow([i, loss_val, acc_val])
-
-    print(f"CSV is saved as: {output_csv}")
